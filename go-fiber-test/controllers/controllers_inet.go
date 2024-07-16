@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"errors"
+	"go-fiber-test/database"
 	"go-fiber-test/models"
 	m "go-fiber-test/models"
 	"log"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
 )
 
 func HelloTest(c *fiber.Ctx) error {
@@ -152,4 +155,393 @@ func Register(c *fiber.Ctx) error {
 		"message": "User registered successfully",
 		"result":  user,
 	})
+}
+
+// CRUD DB
+func GetDeletedDogs(c *fiber.Ctx) error {
+	db := database.DBConn
+	var dogs []m.Dogs
+
+	db.Unscoped().Where("deleted_at is NOT NULL").Find(&dogs)
+	return c.Status(200).JSON(dogs)
+}
+
+func GetDogsRangeCountByDogId(c *fiber.Ctx) error {
+	db := database.DBConn
+	var dogs []m.Dogs
+
+	db.Unscoped().Where("dog_id > ? && dog_id < ?", 50, 100).Find(&dogs)
+	return c.Status(200).JSON(dogs)
+}
+
+func GetDogs(c *fiber.Ctx) error {
+	db := database.DBConn
+	var dogs []m.Dogs
+
+	db.Find(&dogs) //delete = null
+	return c.Status(200).JSON(dogs)
+}
+
+func GetDog(c *fiber.Ctx) error {
+	db := database.DBConn
+	search := strings.TrimSpace(c.Query("search"))
+	var dog []m.Dogs
+
+	result := db.Find(&dog, "dog_id = ?", search)
+
+	if result.RowsAffected == 0 {
+		return c.SendStatus(404)
+	}
+	return c.Status(200).JSON(&dog)
+}
+
+func AddDog(c *fiber.Ctx) error {
+	db := database.DBConn
+	var dog m.Dogs
+
+	if err := c.BodyParser(&dog); err != nil {
+		return c.Status(503).SendString(err.Error())
+	}
+
+	db.Create(&dog)
+	return c.Status(201).JSON(dog)
+}
+
+func UpdateDog(c *fiber.Ctx) error {
+	db := database.DBConn
+	var dog m.Dogs
+	id := c.Params("id")
+
+	if err := c.BodyParser(&dog); err != nil {
+		return c.Status(503).SendString(err.Error())
+	}
+
+	db.Where("id = ?", id).Updates(&dog)
+	return c.Status(200).JSON(dog)
+}
+
+func RemoveDog(c *fiber.Ctx) error {
+	db := database.DBConn
+	id := c.Params("id")
+	var dog m.Dogs
+	result := db.Delete(&dog, id)
+
+	if result.RowsAffected == 0 {
+		return c.SendStatus(404)
+	}
+
+	return c.SendStatus(200)
+}
+
+func GetDogsJsonSummary(c *fiber.Ctx) error {
+	db := database.DBConn
+	var dogs []m.Dogs
+
+	db.Find(&dogs)
+
+	sumRed := 0
+	sumGreen := 0
+	sumPink := 0
+	sumNone := 0
+
+	var dataResults []m.DogsRes
+	for _, v := range dogs {
+		typeStr := ""
+		if v.DogID >= 10 && v.DogID <= 50 {
+			typeStr = "red"
+			sumRed++
+		} else if v.DogID >= 100 && v.DogID <= 150 {
+			typeStr = "green"
+			sumGreen++
+		} else if v.DogID >= 200 && v.DogID <= 250 {
+			typeStr = "pink"
+			sumPink++
+		} else {
+			typeStr = "no color"
+			sumNone++
+		}
+
+		d := m.DogsRes{
+			Name:  v.Name,
+			DogID: v.DogID,
+			Type:  typeStr,
+		}
+		dataResults = append(dataResults, d)
+	}
+
+	r := m.ResultData{
+		Data:        dataResults,
+		Name:        "golang-test",
+		Count:       len(dogs),
+		Sum_red:     sumRed,
+		Sum_green:   sumGreen,
+		Sum_pink:    sumPink,
+		Sum_noColor: sumNone,
+	}
+	return c.Status(200).JSON(r)
+}
+
+func GetDogsJson(c *fiber.Ctx) error {
+	db := database.DBConn
+	var dogs []m.Dogs
+
+	db.Find(&dogs)
+
+	var dataResults []m.DogsRes
+	for _, v := range dogs {
+		typeStr := ""
+		if v.DogID == 111 {
+			typeStr = "red"
+		} else if v.DogID == 113 {
+			typeStr = "green"
+		} else if v.DogID == 999 {
+			typeStr = "pink"
+		} else {
+			typeStr = "no color"
+		}
+
+		d := m.DogsRes{
+			Name:  v.Name,
+			DogID: v.DogID,
+			Type:  typeStr,
+		}
+		dataResults = append(dataResults, d)
+	}
+
+	type ResultData struct {
+		Data  []m.DogsRes `json:"data"`
+		Name  string      `json:"name"`
+		Count int         `json:"count"`
+	}
+	r := ResultData{
+		Data:  dataResults,
+		Name:  "golang-test",
+		Count: len(dogs),
+	}
+	return c.Status(200).JSON(r)
+}
+
+// CRUD companies
+func GetCompanies(c *fiber.Ctx) error {
+	db := database.DBConn
+	var companies []m.Companies
+
+	db.Find(&companies)
+	return c.Status(200).JSON(companies)
+}
+
+func GetCompany(c *fiber.Ctx) error {
+	db := database.DBConn
+	search := strings.TrimSpace(c.Query("search"))
+	var company []m.Companies
+
+	result := db.Find(&company, "id = ?", search)
+
+	if result.RowsAffected == 0 {
+		return c.SendStatus(404)
+	}
+	return c.Status(200).JSON(&company)
+}
+
+func AddCompany(c *fiber.Ctx) error {
+	db := database.DBConn
+	var company m.Companies
+
+	if err := c.BodyParser(&company); err != nil {
+		return c.Status(503).SendString(err.Error())
+	}
+
+	db.Create(&company)
+	return c.Status(201).JSON(company)
+}
+
+func UpdateCompany(c *fiber.Ctx) error {
+	db := database.DBConn
+	var company m.Companies
+	id := c.Params("id")
+
+	if err := c.BodyParser(&company); err != nil {
+		return c.Status(503).SendString(err.Error())
+	}
+
+	db.Where("id = ?", id).Updates(&company)
+	return c.Status(200).JSON(company)
+}
+
+func RemoveCompany(c *fiber.Ctx) error {
+	db := database.DBConn
+	id := c.Params("id")
+	var company m.Companies
+	result := db.Delete(&company, id)
+
+	if result.RowsAffected == 0 {
+		return c.SendStatus(404)
+	}
+
+	return c.SendStatus(200)
+}
+
+// CRUD profiles
+func GetProfiles(c *fiber.Ctx) error {
+	db := database.DBConn
+	var profiles []m.UserProfiles
+
+	db.Find(&profiles)
+	return c.Status(fiber.StatusOK).JSON(profiles)
+}
+
+func GetProfile(c *fiber.Ctx) error {
+	db := database.DBConn
+	search := strings.TrimSpace(c.Query("search"))
+	var profile m.UserProfiles
+
+	result := db.Where("employee_id = ?", search).First(&profile)
+	if result.Error == gorm.ErrRecordNotFound {
+		return c.Status(fiber.StatusNotFound).SendString("User profile not found")
+	}
+
+	return c.Status(fiber.StatusOK).JSON(profile)
+}
+func AddProfile(c *fiber.Ctx) error {
+	db := database.DBConn
+	var profile m.UserProfiles
+
+	if err := c.BodyParser(&profile); err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+	}
+
+	validate := validator.New()
+	if err := validate.Struct(profile); err != nil {
+		fieldErrors := make(map[string]string)
+
+		for _, e := range err.(validator.ValidationErrors) {
+			if e.Field() == "Email" && e.Tag() == "email" {
+				fieldErrors[strings.ToLower(e.Field())] = "Invalid email"
+			} else if e.Field() == "Age" && e.Tag() == "min" {
+				fieldErrors[strings.ToLower(e.Field())] = "Age must be greater than or equal 18"
+			} else {
+				fieldErrors[strings.ToLower(e.Field())] = e.Field() + " is required"
+			}
+		}
+
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"message": "Validation errors occurred",
+			"errors":  fieldErrors,
+		})
+	}
+
+	var existingEmpId m.UserProfiles
+	if err := db.Where("employee_id = ?", profile.EmployeeID).First(&existingEmpId).Error; err == nil {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"message": "Employee ID already exists."})
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+
+	db.Create(&profile)
+
+	return c.Status(fiber.StatusCreated).JSON(profile)
+}
+
+func UpdateProfile(c *fiber.Ctx) error {
+	db := database.DBConn
+	id := c.Params("id")
+	var profile m.UserProfiles
+
+	if err := db.Where("id = ?", id).First(&profile).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).SendString("User profile not found")
+	}
+
+	if err := c.BodyParser(&profile); err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+	}
+
+	if profile.EmployeeID != "" {
+		var existingEmpId m.UserProfiles
+		if err := db.Where("employee_id = ?", profile.EmployeeID).First(&existingEmpId).Error; err == nil && existingEmpId.ID != profile.ID {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"message": "Employee ID already exists."})
+		}
+	}
+
+	db.Save(&profile)
+	return c.Status(fiber.StatusOK).JSON(profile)
+}
+
+func RemoveProfile(c *fiber.Ctx) error {
+	db := database.DBConn
+	id := c.Params("id")
+	var profile m.UserProfiles
+
+	if err := db.Where("id = ?", id).First(&profile).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).SendString("User profile not found")
+	}
+
+	db.Delete(&profile)
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func GetProfileAnyAges(c *fiber.Ctx) error {
+	db := database.DBConn
+	var profiles []m.UserProfiles
+	var result m.UserProfileAgesResult
+	var dataResult []m.UserProfileResult
+
+	db.Find(&profiles)
+
+	for _, profile := range profiles {
+		var genStr string
+
+		switch {
+		case profile.Age < 24:
+			genStr = "Gen Z"
+		case profile.Age >= 24 && profile.Age <= 41:
+			genStr = "Gen Y"
+		case profile.Age >= 42 && profile.Age <= 56:
+			genStr = "Gen X"
+		case profile.Age >= 57 && profile.Age <= 75:
+			genStr = "Baby Boomer"
+		default:
+			genStr = "G.I. Generation"
+		}
+
+		p := m.UserProfileResult{
+			EmployeeID: profile.EmployeeID,
+			Name:       profile.Name,
+			LastName:   profile.LastName,
+			Birthday:   profile.Birthday,
+			Age:        profile.Age,
+			Email:      profile.Email,
+			Tel:        profile.Tel,
+			Gen:        genStr,
+		}
+
+		dataResult = append(dataResult, p)
+
+		switch genStr {
+		case "Gen Z":
+			result.SumGenZ++
+		case "Gen Y":
+			result.SumGenY++
+		case "Gen X":
+			result.SumGenX++
+		case "Baby Boomer":
+			result.SumBabyBoomer++
+		case "G.I. Generation":
+			result.SumGI++
+		}
+	}
+
+	result.Data = dataResult
+	result.Count = len(profiles)
+	result.Name = "profile-ages"
+	return c.Status(fiber.StatusOK).JSON(result)
+}
+
+func SearchProfiles(c *fiber.Ctx) error {
+	db := database.DBConn
+	search := strings.TrimSpace(c.Query("search"))
+	var profiles []m.UserProfiles
+
+	db.Where("(employee_id = ? OR name LIKE ? OR last_name LIKE ?) AND deleted_at IS NULL", search, "%"+search+"%", "%"+search+"%").Find(&profiles)
+
+	return c.Status(fiber.StatusOK).JSON(profiles)
 }
